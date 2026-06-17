@@ -22,6 +22,7 @@ FetchContent_Declare(
   GIT_SHALLOW    TRUE
 )
 FetchContent_MakeAvailable(libigl)
+igl_include(glfw)
 
 add_subdirectory(src)
 add_subdirectory(tests)

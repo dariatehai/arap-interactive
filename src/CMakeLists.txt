@@ -29,4 +29,5 @@ target_include_directories(arap_app PRIVATE
 
 target_link_libraries(arap_app PRIVATE
     arap_lib
+    igl::glfw
 )
