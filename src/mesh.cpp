@@ -141,17 +141,16 @@ Mesh::SparseMatrix Mesh::build_mass_matrix() const {
 void Mesh::clear() {
     vertices_.resize(0, 3);
     faces_.resize(0, 3);
-    weighted_neighbors_.clear();
 }
 
-void Mesh::build_weighted_neighbors()   {
-    weighted_neighbors_.clear();
+std::vector<std::vector<Mesh::WeightedNeighbor>> Mesh::build_weighted_neighbors() const   {
     const int n = vertices_.rows();
-    weighted_neighbors_.resize(n);
-
     if (n == 0 || faces_.rows() == 0) {
-        return;
+        throw std::runtime_error("Cannot build weighted neighbors: mesh has no vertices/faces");
     }
+
+    std::vector<std::vector<WeightedNeighbor>> weighted_neighbors(n);
+    
     //Temp edge-weight container: E(i,j) -> w_ij 
     std::map<std::pair<int, int>, double> edge_weights;
     //Create new edge considering the undirected edges E(i,j) = E(j,i)
@@ -209,8 +208,9 @@ void Mesh::build_weighted_neighbors()   {
         int j = entry.first.second;
         double wij = entry.second;
 
-        weighted_neighbors_[i].push_back({j, wij});
-        weighted_neighbors_[j].push_back({i, wij});
+        weighted_neighbors[i].push_back({j, wij});
+        weighted_neighbors[j].push_back({i, wij});
     }
+    return weighted_neighbors;
 }   
 }  // namespace arap

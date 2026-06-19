@@ -107,3 +107,67 @@ TEST(MeshConstructor, InvalidDimensions) {
 
     EXPECT_THROW(Mesh(bad_vertices, faces), std::invalid_argument);
 }
+
+TEST_F(MeshTest, BuildWeightedNeighbors) {
+    auto neighbors = mesh.build_weighted_neighbors();
+
+    ASSERT_EQ(neighbors.size(), 4);
+
+    auto has_neighbor = [&](int i, int j) -> bool {
+        for (const auto& nb : neighbors[i]) {
+            if (nb.vertex == j) {
+                return true;
+            }
+        }
+        return false;
+    };
+
+    auto find_weight = [&](int i, int j) -> double {
+        for (const auto& nb : neighbors[i]) {
+            if (nb.vertex == j) {
+                return nb.weight;
+            }
+        }
+
+        throw std::runtime_error("Expected neighbor not found");
+    };
+
+    for (int i = 0; i < 4; ++i) {
+        EXPECT_EQ(neighbors[i].size(), 3);
+    }
+
+    EXPECT_TRUE(has_neighbor(0, 1));
+    EXPECT_TRUE(has_neighbor(0, 2));
+    EXPECT_TRUE(has_neighbor(0, 3));
+
+    EXPECT_TRUE(has_neighbor(1, 0));
+    EXPECT_TRUE(has_neighbor(1, 2));
+    EXPECT_TRUE(has_neighbor(1, 3));
+
+    EXPECT_TRUE(has_neighbor(2, 0));
+    EXPECT_TRUE(has_neighbor(2, 1));
+    EXPECT_TRUE(has_neighbor(2, 3));
+
+    EXPECT_TRUE(has_neighbor(3, 0));
+    EXPECT_TRUE(has_neighbor(3, 1));
+    EXPECT_TRUE(has_neighbor(3, 2));
+
+    // Check symmetry.
+    EXPECT_NEAR(find_weight(0, 1), find_weight(1, 0), 1e-10);
+    EXPECT_NEAR(find_weight(0, 2), find_weight(2, 0), 1e-10);
+    EXPECT_NEAR(find_weight(0, 3), find_weight(3, 0), 1e-10);
+    EXPECT_NEAR(find_weight(1, 2), find_weight(2, 1), 1e-10);
+    EXPECT_NEAR(find_weight(1, 3), find_weight(3, 1), 1e-10);
+    EXPECT_NEAR(find_weight(2, 3), find_weight(3, 2), 1e-10);
+
+    // Check expected cotangent weights.
+    EXPECT_NEAR(find_weight(0, 1), 1.0, 1e-10);
+    EXPECT_NEAR(find_weight(0, 2), 1.0, 1e-10);
+    EXPECT_NEAR(find_weight(0, 3), 1.0, 1e-10);
+
+    const double expected_slanted_weight = 0.5 / std::sqrt(3.0);
+
+    EXPECT_NEAR(find_weight(1, 2), expected_slanted_weight, 1e-10);
+    EXPECT_NEAR(find_weight(1, 3), expected_slanted_weight, 1e-10);
+    EXPECT_NEAR(find_weight(2, 3), expected_slanted_weight, 1e-10);
+}
