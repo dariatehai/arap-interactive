@@ -16,6 +16,13 @@ public:
     using VertexMatrix = Eigen::MatrixXd;
     using FaceMatrix = Eigen::MatrixXi;
     using SparseMatrix = Eigen::SparseMatrix<double>;
+    /*
+    The element in weighted neighbor list for the local step to solve R_i 
+    */
+    struct WeightedNeighbor { 
+        int vertex;
+        double weight;
+    };
 
     /**
      * @brief Default constructor - creates empty mesh
@@ -34,7 +41,15 @@ public:
     const FaceMatrix& faces() const { return faces_; }
     int num_vertices() const { return vertices_.rows(); }
     int num_faces() const { return faces_.rows(); }
-
+    //To get weighted neighbor of vertex[i]
+    const std::vector<WeightedNeighbor>& weighted_neighbors(int i) const {
+        return weighted_neighbors_[i];
+    }
+    //To get list of list of weighted neighbors 
+    const std::vector<std::vector<WeightedNeighbor>>& weighted_neighbors() const {
+        return weighted_neighbors_;
+    }
+    
     // Setters
     void set_vertices(const VertexMatrix& vertices) { vertices_ = vertices; }
     void set_faces(const FaceMatrix& faces) { faces_ = faces; }
@@ -73,9 +88,15 @@ public:
      */
     bool is_valid() const { return vertices_.rows() > 0 && faces_.rows() > 0; }
 
+    /*
+    Construct a weighted neighbor list for each vertex
+    */
+    void build_weighted_neighbors();
+
 private:
     VertexMatrix vertices_;  // Nx3 matrix
     FaceMatrix faces_;       // Mx3 matrix
+    std::vector<std::vector<WeightedNeighbor>> weighted_neighbors_;//a list of the weight neighbor list for each vertex
 };
 
 }  // namespace arap
