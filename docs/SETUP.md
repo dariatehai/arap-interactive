@@ -19,6 +19,12 @@ cmake --build build --config Debug --target arap_app
 ## Links to models
 [Simple PLYs](hhttps://people.sc.fsu.edu/~jburkardt/data/ply/ply.html).
 
+## Simplify the mesh in MeshLab
+    1.open target file in MeshLab
+    2.Filters > Remeshing, Simplification and Reconstruction
+    3.Simplification: Quadric Edge Collapse Decimation
+    4.give target faces (around 2000 faces = 1000 vertices)
+    5.File > Export Mesh As ...
 
 ## Github commands
 If you need to clone:
