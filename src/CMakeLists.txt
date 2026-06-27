@@ -2,6 +2,7 @@ add_library(arap_lib
     mesh.cpp
     ply_parser.cpp
     sparse_builder.cpp
+    arap_solver.cpp
 )
 
 target_include_directories(arap_lib PUBLIC

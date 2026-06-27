@@ -13,6 +13,7 @@ add_executable(arap_tests
     test_mesh.cpp
     test_ply_parser.cpp
     test_sparse_builder.cpp
+    test_simple_arap.cpp
 )
 
 target_include_directories(arap_tests PRIVATE
