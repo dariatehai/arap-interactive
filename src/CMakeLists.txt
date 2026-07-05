@@ -32,3 +32,17 @@ target_link_libraries(arap_app PRIVATE
     arap_lib
     igl::glfw
 )
+
+
+# Libigl reference implementation
+add_executable(
+    libigl_reference
+    libigl_main.cpp
+)
+
+target_link_libraries(
+    libigl_reference
+    PRIVATE
+    igl::core
+    igl::glfw
+)

@@ -65,7 +65,7 @@ private:
 
     int n_vertices_ = 0;
 
-    // Reuse Mesh::WeightedNeighbor from your Mesh class for local solver
+    // Reuse Mesh::WeightedNeighbor in Mesh class for local solver
     std::vector<std::vector<Mesh::WeightedNeighbor>> weighted_neighbors_;
 
     // One local rotation per vertex
@@ -86,11 +86,8 @@ private:
     std::unordered_map<int, int> global_to_constraint_;
 
     // Reduced system:
-    //
     // L_ff * V_free + L_fc * V_constraint = b_free
-    //
     // Therefore:
-    //
     // L_ff * V_free = b_free - L_fc * V_constraint
     SparseMatrix L_ff_;
     SparseMatrix L_fc_;
