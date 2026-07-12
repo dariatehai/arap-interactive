@@ -49,11 +49,11 @@ public:
 
 private:
     void precompute_global_solve();
-
     void local_step();
     void global_step();
 
     bool is_constraint_vertex(int vertex_id) const;
+    double compute_energy(const Eigen::MatrixXd& V_deformed) const;
 
 private:
     // Original and deformed vertex positions

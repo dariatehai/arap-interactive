@@ -216,7 +216,7 @@ int main()
                 constraint_positions.row(handle_constraint_row) =
                     world_position.cast<double>().transpose();
                 solver.update_constraint_positions(constraint_positions);
-                solver.solve(5);
+                solver.solve(50);
                 V0 = solver.deformed_vertices();
 
                 make_uv_sphere(

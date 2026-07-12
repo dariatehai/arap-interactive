@@ -255,9 +255,16 @@ void ARAPSolver::solve(int iterations) {
         throw std::runtime_error("Call set_constraints() before solve().");
     }
 
+    double previous_energy =  compute_energy(V_);
+
     for (int iter = 0; iter < iterations; ++iter) {
         local_step();
         global_step();
+        //output Energy per iteration
+        double current_energy = compute_energy(V_);
+        double relative_energy_change = std::abs(current_energy - previous_energy);
+        std::cout << "Iteration " << iter << ": E = " << current_energy << ", dE = |E_k - E_(k-1)| = " << relative_energy_change <<std::endl;
+        previous_energy = current_energy;
     }
 }
 
@@ -267,6 +274,22 @@ bool ARAPSolver::is_constraint_vertex(int vertex_id) const {
     }
 
     return is_constraint_[vertex_id];
+}
+
+double ARAPSolver::compute_energy(const Eigen::MatrixXd& V_deformed) const {
+    double E = 0.0;
+    //Based on function(7) in reference paper using w_i = 1
+    for (int i=0; i < V_deformed.rows(); i++) {
+        for (const auto& neighbor : weighted_neighbors_[i]) {
+            const int j = neighbor.vertex;
+            const double w = neighbor.weight;
+            const Eigen::Vector3d original_edge = (V0_.row(i) - V0_.row(j)).transpose();
+            const Eigen::Vector3d deformed_edge = (V_deformed.row(i) - V_deformed.row(j)).transpose();
+            const Eigen::Vector3d diff = deformed_edge - rotations_[i] * original_edge;
+            E += w * diff.squaredNorm();
+        }
+    }
+    return E;
 }
 
 } // namespace arap
