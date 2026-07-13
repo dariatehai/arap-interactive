@@ -46,3 +46,14 @@ target_link_libraries(
     igl::core
     igl::glfw
 )
+
+# Comparison executable
+add_executable(arap_compare
+    compare_main.cpp
+)
+
+target_link_libraries(arap_compare PRIVATE
+    arap_lib
+    igl::core
+    igl::glfw
+)

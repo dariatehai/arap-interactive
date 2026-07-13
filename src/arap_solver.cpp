@@ -255,16 +255,25 @@ void ARAPSolver::solve(int iterations) {
         throw std::runtime_error("Call set_constraints() before solve().");
     }
 
-    double previous_energy =  compute_energy(V_);
+    double previous_energy =  0.0;
+    bool has_previous_energy = false;
 
     for (int iter = 0; iter < iterations; ++iter) {
         local_step();
         global_step();
         //output Energy per iteration
         double current_energy = compute_energy(V_);
-        double relative_energy_change = std::abs(current_energy - previous_energy);
-        std::cout << "Iteration " << iter << ": E = " << current_energy << ", dE = |E_k - E_(k-1)| = " << relative_energy_change <<std::endl;
+        std::cout << "Iteration " << iter << ": E = " << current_energy;
+        
+        if (has_previous_energy) {
+            double relative_energy_change = std::abs(current_energy - previous_energy);
+            std::cout << "; dE = " << relative_energy_change;
+        }
+
+        std::cout << std::endl;
+
         previous_energy = current_energy;
+        has_previous_energy = true;
     }
 }
 
