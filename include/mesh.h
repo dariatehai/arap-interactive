@@ -58,6 +58,8 @@ public:
      */
     SparseMatrix build_cotangent_laplacian() const;
 
+    SparseMatrix build_clamped_cotangent_laplacian() const;
+
     /**
      * @brief Build the mass matrix (diagonal matrix with vertex areas)
      * @return NxN sparse diagonal matrix
@@ -84,6 +86,7 @@ public:
     Construct a weighted neighbor list for each vertex
     */
     std::vector<std::vector<WeightedNeighbor>> build_weighted_neighbors() const;
+    
 
 private:
     VertexMatrix vertices_;  // Nx3 matrix

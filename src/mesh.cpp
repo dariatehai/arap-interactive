@@ -119,6 +119,70 @@ Mesh::SparseMatrix Mesh::build_cotangent_laplacian() const {
     return L;
 }
 
+Mesh::SparseMatrix Mesh::build_clamped_cotangent_laplacian() const {
+    using Triplet = Eigen::Triplet<double>;
+    using Edge = std::pair<int, int>;
+
+    const int n = vertices_.rows();
+    std::map<Edge, double> edge_weights;
+    //unique key for every undirected edge -> always (smaller index, larger index)
+    auto make_edge = [](int a, int b) -> Edge {
+        if (a > b) {
+            std::swap(a, b);
+        }
+        return {a, b};
+    };
+
+    auto compute_cotangent = [this](int opposite, int v1, int v2) -> double {
+        const Eigen::Vector3d u = vertices_.row(v1).transpose() - vertices_.row(opposite).transpose();
+        const Eigen::Vector3d v = vertices_.row(v2).transpose() - vertices_.row(opposite).transpose();
+        double numerator = u.dot(v);
+        double denominator = u.cross(v).norm();
+
+        if (denominator < 1e-10) {
+            return 0.0;
+        }
+        return numerator/denominator;
+    };
+
+    for (int f = 0; f < faces_.rows(); f++) {
+        int v0 = faces_(f, 0);
+        int v1 = faces_(f, 1);
+        int v2 = faces_(f, 2);
+        //accumalate cotangent weights for every edge
+        double cot_v2 = compute_cotangent(v2, v0, v1);
+        edge_weights[make_edge(v0, v1)] += 0.5 * cot_v2;
+        double cot_v0 = compute_cotangent(v0, v1, v2);
+        edge_weights[make_edge(v1, v2)] += 0.5 * cot_v0;
+        double cot_v1 = compute_cotangent(v1, v2, v0);
+        edge_weights[make_edge(v2, v0)] += 0.5 * cot_v1;
+    }
+
+    std::vector<Triplet> triplets;
+    std::vector<double> diagonal(n, 0.0); //Diagonal in L always += w
+    
+    for (const auto& [edge, weights] : edge_weights) {
+        int i = edge.first;
+        int j = edge.second;
+        //clamp the negative weights to zero
+        double w = std::max(0.0, weights);
+
+        diagonal[i] += w;
+        diagonal[j] += w;
+        triplets.emplace_back(i, j, -w);
+        triplets.emplace_back(j, i, -w);
+    }
+
+    for (int i = 0; i < n; ++i) {
+        triplets.emplace_back(i, i, diagonal[i]);
+    }
+
+    SparseMatrix L(n, n);
+    L.setFromTriplets(triplets.begin(), triplets.end());
+    L.makeCompressed();
+    return L;
+}
+
 Mesh::SparseMatrix Mesh::build_mass_matrix() const {
     using Triplet = Eigen::Triplet<double>;
     std::vector<Triplet> triplets;
@@ -206,8 +270,8 @@ std::vector<std::vector<Mesh::WeightedNeighbor>> Mesh::build_weighted_neighbors(
     for (const auto& entry : edge_weights) {
         int i = entry.first.first;
         int j = entry.first.second;
-        double wij = entry.second;
-
+        double wij = std::max(0.0, entry.second); //clamped egde weights
+        //double wij = entry.second;
         weighted_neighbors[i].push_back({j, wij});
         weighted_neighbors[j].push_back({i, wij});
     }

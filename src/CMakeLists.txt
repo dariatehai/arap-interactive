@@ -45,4 +45,29 @@ target_link_libraries(
     PRIVATE
     igl::core
     igl::glfw
+<<<<<<< Updated upstream
+=======
+)
+
+# Comparison executable
+add_executable(arap_compare
+    compare_main.cpp
+)
+
+target_link_libraries(arap_compare PRIVATE
+    arap_lib
+    igl::core
+    igl::glfw
+)
+
+# Error executable
+add_executable(arap_error
+    vertices_error_main.cpp
+)
+
+target_link_libraries(arap_error PRIVATE
+    arap_lib
+    igl::core
+    igl::glfw
+>>>>>>> Stashed changes
 )
