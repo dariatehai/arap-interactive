@@ -45,8 +45,6 @@ target_link_libraries(
     PRIVATE
     igl::core
     igl::glfw
-<<<<<<< Updated upstream
-=======
 )
 
 # Comparison executable
@@ -69,5 +67,4 @@ target_link_libraries(arap_error PRIVATE
     arap_lib
     igl::core
     igl::glfw
->>>>>>> Stashed changes
 )
