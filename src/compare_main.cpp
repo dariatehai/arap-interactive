@@ -6,14 +6,20 @@
 #include <iostream>
 #include "arap_solver.h"
 #include "ply_parser.h"
+#include <chrono>
+
+using Clock = std::chrono::steady_clock;
+using Milliseconds = std::chrono::duration<double, std::milli>;
+
 
 int main() {
     //mode = 0 using own arap; mode = 1 using libigl as reference
     int mode = 0;
+    
     //Displacement for both arap for comparison
-    Eigen::Vector3d displacement(0.0, 50.0, 0.0);
+    //Eigen::Vector3d displacement(0.0, 50.0, 0.0);
     //maximal iteration
-    int iteration = 100;
+    int iteration = 20;
     //For visualization
     Eigen::MatrixXd V_display;
     int highlight_handle_index;
@@ -22,13 +28,21 @@ int main() {
     if (mode == 0) {
         arap::Mesh mesh = arap::PLYParser::load("data/Simplified_Armadillo.ply");
         Eigen::MatrixXd V0 = mesh.vertices();
+        //bounding box diagonal
+        Eigen::RowVector3d bbox_min = V0.colwise().minCoeff();
+        Eigen::RowVector3d bbox_max = V0.colwise().maxCoeff();
+        double diagonal = (bbox_max - bbox_min).norm();
+        const Eigen::Vector3d displacement(0.0, 0.1 * diagonal, 0.0);
         //A simple test
-        const int handle = V0.rows() / 16;
-        std::vector<int> fixed = {0};
+        int fixed_index = 0;
+        V0.col(1).minCoeff(&fixed_index);
+        int handle_index = 0;
+        V0.col(1).maxCoeff(&handle_index);
+
+        const int handle = handle_index;
+        std::vector<int> fixed = {fixed_index};
         Eigen::Vector3d target = V0.row(handle).transpose() + displacement;
-        
-        arap::ARAPSolver solver;
-        solver.initialize(mesh);
+
         //set indices of constraint
         std::vector<int> constraint_indices = fixed;
         constraint_indices.push_back(handle);
@@ -41,8 +55,20 @@ int main() {
         //handle
         constraint_positions.row(constraint_indices.size() - 1) = target;
 
+        
+        arap::ARAPSolver solver;
+        const auto time_start = Clock::now();
+        solver.initialize(mesh);
         solver.set_constraints(constraint_indices, constraint_positions);
         solver.solve(iteration);
+        const auto time_end = Clock::now();
+
+        //calculate time
+        double arap_time_ms = Milliseconds(time_end - time_start).count();
+        double average_iteration_ms = arap_time_ms / iteration;
+        //output
+        std::cout << "Solve time for " << iteration << " iterations: " << arap_time_ms << "ms." << std::endl;
+        std::cout << "Average iteration time: " << average_iteration_ms << "ms." << std::endl;
 
         V_display = solver.deformed_vertices();
         highlight_handle_index = handle;
@@ -54,8 +80,18 @@ int main() {
             std::cerr << "Failed to read mesh.\n";
             return 1;
         }
-        const int handle = V.rows() / 16;
-        std::vector<int> fixed_vertices = {0};
+        Eigen::RowVector3d bbox_min = V.colwise().minCoeff();
+        Eigen::RowVector3d bbox_max = V.colwise().maxCoeff();
+        double diagonal = (bbox_max - bbox_min).norm();
+        const Eigen::Vector3d displacement(0.0, 0.1 * diagonal, 0.0);
+
+        int fixed_index = 0;
+        V.col(1).minCoeff(&fixed_index);
+        int handle_index = 0;
+        V.col(1).maxCoeff(&handle_index);
+
+        const int handle = handle_index;
+        std::vector<int> fixed_vertices = {fixed_index};
         Eigen::Vector3d target = V.row(handle).transpose() + displacement;
         
         int num_constraints = fixed_vertices.size() + 1;
@@ -68,21 +104,30 @@ int main() {
         }
         b(fixed_vertices.size()) = handle;
         bc.row(fixed_vertices.size()) = target;
-
+        
         igl::ARAPData arap_data;
         arap_data.energy = igl::ARAP_ENERGY_TYPE_SPOKES;
         arap_data.max_iter = iteration;
         arap_data.with_dynamics = false;
-
+        
+        const auto time_start = Clock::now();
         if (!igl::arap_precomputation(V, F, 3, b, arap_data)) {
             std::cerr << "precomputation failed\n";
             return 1;
         }
-
         if (!igl::arap_solve(bc, arap_data, V)) {
             std::cerr << "ARAP solve failed\n";
             return 1;
         }
+        const auto time_end = Clock::now();
+
+        //calculate time
+        double arap_time_ms = Milliseconds(time_end - time_start).count();
+        double average_iteration_ms = arap_time_ms / iteration;
+        //output
+        std::cout << "Solve time(libigl) for " << iteration << " iterations: " << arap_time_ms << "ms." << std::endl;
+        std::cout << "Average iteration time(libigl): " << average_iteration_ms << "ms." << std::endl;
+
 
         V_display = V;
         highlight_handle_index = handle;

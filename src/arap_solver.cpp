@@ -16,7 +16,6 @@ void ARAPSolver::initialize(const Mesh& mesh) {
 
     n_vertices_ = static_cast<int>(V0_.rows());
 
-    
     // neighbor lists and corresponding weights
     weighted_neighbors_ = mesh.build_weighted_neighbors();
 
@@ -26,6 +25,7 @@ void ARAPSolver::initialize(const Mesh& mesh) {
     //initialize the R for each vertices
     rotations_.assign(n_vertices_, Eigen::Matrix3d::Identity());
     //create Laplacian-like matrix L for global part
+    //L_ = mesh.build_clamped_cotangent_laplacian(); //using clamped w_ij
     L_ = -mesh.build_cotangent_laplacian();
 
     initialized_ = true;
@@ -254,26 +254,29 @@ void ARAPSolver::solve(int iterations) {
     if (!constraints_ready_) {
         throw std::runtime_error("Call set_constraints() before solve().");
     }
-
+    bool output_energy = false;
     double previous_energy =  0.0;
     bool has_previous_energy = false;
 
     for (int iter = 0; iter < iterations; ++iter) {
         local_step();
         global_step();
-        //output Energy per iteration
-        double current_energy = compute_energy(V_);
-        std::cout << "Iteration " << iter << ": E = " << current_energy;
+
+        if (output_energy) {
+            //output Energy per iteration
+            double current_energy = compute_energy(V_);
+            std::cout << "Iteration " << iter << ": E = " << current_energy;
         
-        if (has_previous_energy) {
-            double relative_energy_change = std::abs(current_energy - previous_energy);
-            std::cout << "; dE = " << relative_energy_change;
+            if (has_previous_energy) {
+                double relative_energy_change = std::abs(current_energy - previous_energy);
+                std::cout << "; dE = " << relative_energy_change;
+            }
+
+            std::cout << std::endl;
+
+            previous_energy = current_energy;
+            has_previous_energy = true;
         }
-
-        std::cout << std::endl;
-
-        previous_energy = current_energy;
-        has_previous_energy = true;
     }
 }
 

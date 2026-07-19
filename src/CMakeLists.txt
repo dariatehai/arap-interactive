@@ -57,3 +57,14 @@ target_link_libraries(arap_compare PRIVATE
     igl::core
     igl::glfw
 )
+
+# Error executable
+add_executable(arap_error
+    vertices_error_main.cpp
+)
+
+target_link_libraries(arap_error PRIVATE
+    arap_lib
+    igl::core
+    igl::glfw
+)
