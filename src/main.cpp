@@ -1,20 +1,24 @@
-#include "ply_parser.h"
 #include "arap_solver.h"
 
+#include <igl/file_dialog_open.h>
 #include <igl/opengl/glfw/Viewer.h>
 #include <igl/opengl/glfw/imgui/ImGuiHelpers.h>
 #include <igl/opengl/glfw/imgui/ImGuiMenu.h>
 #include <igl/opengl/glfw/imgui/ImGuiPlugin.h>
 #include <igl/project.h>
+#include <igl/read_triangle_mesh.h>
 #include <igl/unproject.h>
 #include <Eigen/Core>
 #include <imgui.h>
 
 #include <algorithm>
 #include <cmath>
+#include <functional>
 #include <iostream>
+#include <memory>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -67,45 +71,31 @@ struct Handle {
 int main()
 {
     try {
-        arap::Mesh mesh = arap::PLYParser::load("data/Simplified_Armadillo.ply");
-        if (!mesh.is_valid()) {
-            std::cerr << "Error: Loaded mesh is empty." << std::endl;
-            return 1;
-        }
-
-        Eigen::MatrixXd V0 = mesh.vertices();
-        const Eigen::MatrixXi& F = mesh.faces();
-
-        const int fixed_vertex = 0;
-
-        // Pin a small patch instead of one vertex; otherwise the model can
-        // still spin around the fixed point.
-        std::vector<int> fixed_vertices = {fixed_vertex};
-        for (int face = 0; face < F.rows(); ++face) {
-            bool contains_fixed_vertex = false;
-            for (int corner = 0; corner < 3; ++corner) {
-                contains_fixed_vertex |= F(face, corner) == fixed_vertex;
-            }
-            if (!contains_fixed_vertex) {
-                continue;
-            }
-            for (int corner = 0; corner < 3; ++corner) {
-                const int vertex = F(face, corner);
-                if (std::find(fixed_vertices.begin(), fixed_vertices.end(), vertex) ==
-                        fixed_vertices.end()) {
-                    fixed_vertices.push_back(vertex);
-                }
-            }
-        }
-
-        arap::ARAPSolver solver;
-        solver.initialize(mesh);
-
+        arap::Mesh mesh;
+        Eigen::MatrixXd V0;
+        Eigen::MatrixXi F;
+        std::unique_ptr<arap::ARAPSolver> solver;
+        bool has_mesh = false;
         std::vector<Handle> handles;
+        std::vector<int> fixed_vertices;
         std::vector<int> constraint_indices;
         Eigen::MatrixXd constraint_positions;
+        double handle_radius = 0.0;
+        std::string mesh_status = "No mesh loaded.";
+        std::string vertex_id_text = "0";
+        std::string handle_status = "Load a mesh first.";
+        bool dragging = false;
+        int dragged_handle = -1;
+        float drag_depth = 0.0f;
+        Eigen::Vector2f drag_offset = Eigen::Vector2f::Zero();
 
-        auto update_constraints = [&]() {
+        std::function<void()> update_constraints = [&]() {
+            if (!has_mesh) {
+                constraint_indices.clear();
+                constraint_positions.resize(0, 3);
+                return;
+            }
+
             constraint_indices = fixed_vertices;
             constraint_indices.reserve(fixed_vertices.size() + handles.size());
             for (const Handle& handle : handles) {
@@ -124,20 +114,21 @@ int main()
                     handles[row].position;
             }
 
-            solver.set_constraints(constraint_indices, constraint_positions);
+            solver->set_constraints(constraint_indices, constraint_positions);
         };
 
-        update_constraints();
-
-        const double handle_radius =
-            0.01 * (V0.colwise().maxCoeff() -
-                     V0.colwise().minCoeff()).norm();
         Eigen::MatrixXd handle_vertices;
         Eigen::MatrixXi handle_faces;
 
-        auto update_handle_mesh = [&]() {
+        std::function<void()> update_handle_mesh = [&]() {
             constexpr int sphere_vertex_count = (12 + 1) * 20;
             constexpr int sphere_face_count = 2 * 12 * 20;
+
+            if (!has_mesh || handles.empty()) {
+                handle_vertices.resize(0, 3);
+                handle_faces.resize(0, 3);
+                return;
+            }
 
             handle_vertices.resize(
                 static_cast<int>(handles.size()) * sphere_vertex_count,
@@ -169,7 +160,16 @@ int main()
         Eigen::MatrixXi display_faces;
         Eigen::MatrixXd display_colors;
 
-        auto update_display_mesh = [&]() {
+        std::function<void()> update_display_mesh = [&]() {
+            if (!has_mesh) {
+                display_vertices.resize(0, 3);
+                display_faces.resize(0, 3);
+                display_colors.resize(0, 3);
+                handle_vertices.resize(0, 3);
+                handle_faces.resize(0, 3);
+                return;
+            }
+
             update_handle_mesh();
 
             display_vertices.resize(V0.rows() + handle_vertices.rows(), 3);
@@ -195,16 +195,16 @@ int main()
             }
         };
 
-        update_display_mesh();
-
         igl::opengl::glfw::Viewer viewer;
-        const int mesh_id = viewer.data().id;
-        viewer.data().set_mesh(display_vertices, display_faces);
-        viewer.data().set_colors(display_colors);
-        viewer.data().show_lines = true;
+        int mesh_id = viewer.data().id;
 
-        auto refresh_viewer_mesh =
+        std::function<void(igl::opengl::glfw::Viewer&, bool)> refresh_viewer_mesh =
             [&](igl::opengl::glfw::Viewer& v, bool update_faces) {
+                if (!has_mesh) {
+                    v.data(mesh_id).clear();
+                    return;
+                }
+
                 update_display_mesh();
                 if (update_faces) {
                     v.data(mesh_id).clear();
@@ -218,19 +218,102 @@ int main()
                 v.data(mesh_id).compute_normals();
             };
 
-        bool dragging = false;
-        int dragged_handle = -1;
-        float drag_depth = 0.0f;
-        Eigen::Vector2f drag_offset = Eigen::Vector2f::Zero();
-        std::string vertex_id_text = "481";
-        std::string handle_status = "No handles yet.";
+        std::function<void()> reset_handles = [&]() {
+            handles.clear();
+            dragged_handle = -1;
+            dragging = false;
+        };
+
+        std::function<void()> choose_fixed_vertices = [&]() {
+            fixed_vertices.clear();
+            if (!has_mesh || V0.rows() == 0) {
+                return;
+            }
+
+            constexpr int fixed_vertex = 0;
+            fixed_vertices.push_back(fixed_vertex);
+            for (int face = 0; face < F.rows(); ++face) {
+                bool contains_fixed_vertex = false;
+                for (int corner = 0; corner < 3; ++corner) {
+                    contains_fixed_vertex |= F(face, corner) == fixed_vertex;
+                }
+                if (!contains_fixed_vertex) {
+                    continue;
+                }
+                for (int corner = 0; corner < 3; ++corner) {
+                    const int vertex = F(face, corner);
+                    if (std::find(fixed_vertices.begin(), fixed_vertices.end(), vertex) ==
+                            fixed_vertices.end()) {
+                        fixed_vertices.push_back(vertex);
+                    }
+                }
+            }
+        };
+
+        std::function<void(const std::string&)> load_mesh = [&](const std::string& filename) {
+            Eigen::MatrixXd loaded_vertices;
+            Eigen::MatrixXi loaded_faces;
+            if (!igl::read_triangle_mesh(filename, loaded_vertices, loaded_faces)) {
+                mesh_status = "Could not load mesh.";
+                return;
+            }
+            if (loaded_vertices.rows() == 0 || loaded_vertices.cols() != 3 ||
+                loaded_faces.rows() == 0 || loaded_faces.cols() != 3) {
+                mesh_status = "Expected a triangle mesh.";
+                return;
+            }
+
+            arap::Mesh loaded_mesh(loaded_vertices, loaded_faces);
+            std::unique_ptr<arap::ARAPSolver> loaded_solver =
+                std::make_unique<arap::ARAPSolver>();
+            loaded_solver->initialize(loaded_mesh);
+
+            mesh = loaded_mesh;
+            solver = std::move(loaded_solver);
+            V0 = mesh.vertices();
+            F = mesh.faces();
+            has_mesh = true;
+            reset_handles();
+            choose_fixed_vertices();
+            handle_radius =
+                0.01 * (V0.colwise().maxCoeff() - V0.colwise().minCoeff()).norm();
+            if (handle_radius <= 0.0) {
+                handle_radius = 0.01;
+            }
+            update_constraints();
+
+            mesh_id = viewer.data().id;
+            mesh_status = "Loaded " + filename + ".";
+            handle_status = "No handles yet.";
+            refresh_viewer_mesh(viewer, true);
+            viewer.core().align_camera_center(V0, F);
+        };
+
+        std::function<void()> clear_mesh = [&]() {
+            mesh.clear();
+            V0.resize(0, 3);
+            F.resize(0, 3);
+            fixed_vertices.clear();
+            constraint_indices.clear();
+            constraint_positions.resize(0, 3);
+            solver.reset();
+            has_mesh = false;
+            reset_handles();
+            mesh_status = "No mesh loaded.";
+            handle_status = "Load a mesh first.";
+            refresh_viewer_mesh(viewer, true);
+        };
 
         igl::opengl::glfw::imgui::ImGuiPlugin plugin;
         viewer.plugins.push_back(&plugin);
         igl::opengl::glfw::imgui::ImGuiMenu menu;
         plugin.widgets.push_back(&menu);
 
-        auto push_handle = [&](int vertex_id) {
+        std::function<void(int)> push_handle = [&](int vertex_id) {
+            if (!has_mesh) {
+                handle_status = "Load a mesh first.";
+                return;
+            }
             if (vertex_id < 0 || vertex_id >= V0.rows()) {
                 handle_status = "Vertex id out of range.";
                 return;
@@ -240,7 +323,7 @@ int main()
                 handle_status = "That vertex is fixed.";
                 return;
             }
-            const auto duplicate = std::find_if(
+            std::vector<Handle>::const_iterator duplicate = std::find_if(
                 handles.begin(),
                 handles.end(),
                 [&](const Handle& handle) {
@@ -257,9 +340,9 @@ int main()
             refresh_viewer_mesh(viewer, true);
         };
 
-        auto pop_handle = [&]() {
+        std::function<void()> pop_handle = [&]() {
             if (handles.empty()) {
-                handle_status = "No handle to pop.";
+                handle_status = has_mesh ? "No handle to pop." : "Load a mesh first.";
                 return;
             }
             const int vertex_id = handles.back().vertex;
@@ -267,17 +350,21 @@ int main()
             dragged_handle = -1;
             dragging = false;
             update_constraints();
-            solver.solve(5);
-            V0 = solver.deformed_vertices();
+            solver->solve(5);
+            V0 = solver->deformed_vertices();
             handle_status = "Removed handle " + std::to_string(vertex_id) + ".";
             refresh_viewer_mesh(viewer, true);
         };
 
-        auto clear_handles = [&]() {
+        std::function<void()> clear_handles = [&]() {
+            if (!has_mesh) {
+                handle_status = "Load a mesh first.";
+                return;
+            }
             handles.clear();
             dragged_handle = -1;
             dragging = false;
-            solver.initialize(mesh);
+            solver->initialize(mesh);
             V0 = mesh.vertices();
             update_constraints();
             handle_status = "Cleared all handles.";
@@ -285,7 +372,30 @@ int main()
         };
 
         menu.callback_draw_viewer_menu = [&]() {
-            menu.draw_viewer_menu();
+            if (ImGui::CollapsingHeader("Mesh", ImGuiTreeNodeFlags_DefaultOpen)) {
+                if (ImGui::Button("Load", ImVec2(-1, 0))) {
+                    const std::string filename = igl::file_dialog_open();
+                    if (!filename.empty()) {
+                        try {
+                            load_mesh(filename);
+                        } catch (const std::exception& e) {
+                            const std::string error = e.what();
+                            clear_mesh();
+                            mesh_status = error;
+                        }
+                    }
+                }
+
+                if (ImGui::Button("Clear", ImVec2(-1, 0))) {
+                    clear_mesh();
+                }
+
+                if (has_mesh) {
+                    ImGui::Text("Vertices: %d", static_cast<int>(V0.rows()));
+                    ImGui::Text("Faces: %d", static_cast<int>(F.rows()));
+                }
+                ImGui::TextWrapped("%s", mesh_status.c_str());
+            }
 
             if (ImGui::CollapsingHeader("Handles", ImGuiTreeNodeFlags_DefaultOpen)) {
                 ImGui::InputText("Vertex ID", vertex_id_text);
@@ -322,17 +432,38 @@ int main()
                 }
                 ImGui::TextWrapped("%s", handle_status.c_str());
             }
+
+            if (ImGui::CollapsingHeader("View", ImGuiTreeNodeFlags_DefaultOpen)) {
+                if (ImGui::Button("Center", ImVec2(-1, 0)) && has_mesh) {
+                    viewer.core().align_camera_center(V0, F);
+                }
+                if (has_mesh) {
+                    bool show_lines = viewer.data(mesh_id).show_lines != 0;
+                    bool show_faces = viewer.data(mesh_id).show_faces != 0;
+                    if (ImGui::Checkbox("Wireframe", &show_lines)) {
+                        viewer.data(mesh_id).show_lines = show_lines;
+                    }
+                    if (ImGui::Checkbox("Faces", &show_faces)) {
+                        viewer.data(mesh_id).show_faces = show_faces;
+                    }
+                }
+            }
         };
 
         viewer.callback_init =
             [&](igl::opengl::glfw::Viewer& v) {
-                v.core().align_camera_center(V0, F);
+                if (has_mesh) {
+                    v.core().align_camera_center(V0, F);
+                }
                 return false;
             };
 
         viewer.callback_mouse_down =
             [&](igl::opengl::glfw::Viewer& v, int button, int /*modifier*/) {
                 if (button != 0) {
+                    return false;
+                }
+                if (!has_mesh || handles.empty()) {
                     return false;
                 }
 
@@ -377,7 +508,7 @@ int main()
 
         viewer.callback_mouse_move =
             [&](igl::opengl::glfw::Viewer& v, int mouse_x, int mouse_y) {
-                if (!dragging) {
+                if (!has_mesh || !dragging || dragged_handle < 0) {
                     return false;
                 }
 
@@ -400,9 +531,9 @@ int main()
                 constraint_positions.row(
                     static_cast<int>(fixed_vertices.size()) + dragged_handle) =
                     handles[dragged_handle].position;
-                solver.update_constraint_positions(constraint_positions);
-                solver.solve(5);
-                V0 = solver.deformed_vertices();
+                solver->update_constraint_positions(constraint_positions);
+                solver->solve(5);
+                V0 = solver->deformed_vertices();
 
                 refresh_viewer_mesh(v, false);
                 return true;
