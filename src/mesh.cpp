@@ -270,8 +270,8 @@ std::vector<std::vector<Mesh::WeightedNeighbor>> Mesh::build_weighted_neighbors(
     for (const auto& entry : edge_weights) {
         int i = entry.first.first;
         int j = entry.first.second;
-        double wij = std::max(0.0, entry.second); //clamped egde weights
-        //double wij = entry.second;
+        //double wij = std::max(0.0, entry.second); //clamped egde weights
+        double wij = entry.second;
         weighted_neighbors[i].push_back({j, wij});
         weighted_neighbors[j].push_back({i, wij});
     }

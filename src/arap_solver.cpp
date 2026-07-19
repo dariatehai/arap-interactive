@@ -25,8 +25,8 @@ void ARAPSolver::initialize(const Mesh& mesh) {
     //initialize the R for each vertices
     rotations_.assign(n_vertices_, Eigen::Matrix3d::Identity());
     //create Laplacian-like matrix L for global part
-    L_ = mesh.build_clamped_cotangent_laplacian(); //using clamped w_ij
-    //L_ = -mesh.build_cotangent_laplacian();
+    //L_ = mesh.build_clamped_cotangent_laplacian(); //using clamped w_ij
+    L_ = -mesh.build_cotangent_laplacian();
 
     initialized_ = true;
     constraints_ready_ = false;

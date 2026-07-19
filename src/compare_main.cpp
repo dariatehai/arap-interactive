@@ -15,10 +15,11 @@ using Milliseconds = std::chrono::duration<double, std::milli>;
 int main() {
     //mode = 0 using own arap; mode = 1 using libigl as reference
     int mode = 0;
+    
     //Displacement for both arap for comparison
-    Eigen::Vector3d displacement(0.0, 50.0, 0.0);
+    //Eigen::Vector3d displacement(0.0, 50.0, 0.0);
     //maximal iteration
-    int iteration = 100;
+    int iteration = 20;
     //For visualization
     Eigen::MatrixXd V_display;
     int highlight_handle_index;
@@ -27,9 +28,19 @@ int main() {
     if (mode == 0) {
         arap::Mesh mesh = arap::PLYParser::load("data/Simplified_Armadillo.ply");
         Eigen::MatrixXd V0 = mesh.vertices();
+        //bounding box diagonal
+        Eigen::RowVector3d bbox_min = V0.colwise().minCoeff();
+        Eigen::RowVector3d bbox_max = V0.colwise().maxCoeff();
+        double diagonal = (bbox_max - bbox_min).norm();
+        const Eigen::Vector3d displacement(0.0, 0.1 * diagonal, 0.0);
         //A simple test
-        const int handle = V0.rows() / 16;
-        std::vector<int> fixed = {0};
+        int fixed_index = 0;
+        V0.col(1).minCoeff(&fixed_index);
+        int handle_index = 0;
+        V0.col(1).maxCoeff(&handle_index);
+
+        const int handle = handle_index;
+        std::vector<int> fixed = {fixed_index};
         Eigen::Vector3d target = V0.row(handle).transpose() + displacement;
 
         //set indices of constraint
@@ -44,8 +55,9 @@ int main() {
         //handle
         constraint_positions.row(constraint_indices.size() - 1) = target;
 
-        const auto time_start = Clock::now();
+        
         arap::ARAPSolver solver;
+        const auto time_start = Clock::now();
         solver.initialize(mesh);
         solver.set_constraints(constraint_indices, constraint_positions);
         solver.solve(iteration);
@@ -68,8 +80,18 @@ int main() {
             std::cerr << "Failed to read mesh.\n";
             return 1;
         }
-        const int handle = V.rows() / 16;
-        std::vector<int> fixed_vertices = {0};
+        Eigen::RowVector3d bbox_min = V.colwise().minCoeff();
+        Eigen::RowVector3d bbox_max = V.colwise().maxCoeff();
+        double diagonal = (bbox_max - bbox_min).norm();
+        const Eigen::Vector3d displacement(0.0, 0.1 * diagonal, 0.0);
+
+        int fixed_index = 0;
+        V.col(1).minCoeff(&fixed_index);
+        int handle_index = 0;
+        V.col(1).maxCoeff(&handle_index);
+
+        const int handle = handle_index;
+        std::vector<int> fixed_vertices = {fixed_index};
         Eigen::Vector3d target = V.row(handle).transpose() + displacement;
         
         int num_constraints = fixed_vertices.size() + 1;
