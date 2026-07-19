@@ -23,6 +23,7 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(libigl)
 igl_include(glfw)
+igl_include(imgui)
 
 add_subdirectory(src)
 add_subdirectory(tests)
