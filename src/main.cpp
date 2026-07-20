@@ -386,7 +386,7 @@ int main()
                     }
                 }
 
-                if (ImGui::Button("Clear", ImVec2(-1, 0))) {
+                if (ImGui::Button("Clear##Mesh", ImVec2(-1, 0))) {
                     clear_mesh();
                 }
 
@@ -418,7 +418,7 @@ int main()
                     pop_handle();
                 }
 
-                if (ImGui::Button("Clear", ImVec2(-1, 0))) {
+                if (ImGui::Button("Clear##Handles", ImVec2(-1, 0))) {
                     clear_handles();
                 }
 
